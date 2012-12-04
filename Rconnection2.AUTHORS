@@ -1,0 +1,7 @@
+C++ Interface to Rserve
+
+Original code: https://github.com/s-u/Rserve
+Copyright (C) 2004-8 Simon Urbanek, All rights reserved.
+
+Rconnection2 C++11 library: https://github.com/ivanp2015/Rconnection2
+Copyright (C) 2015 Ivan Pizhenko <ivan.pizhenko __at__ gmail.com>, All rights reserved.
