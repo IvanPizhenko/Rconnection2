@@ -1,5 +1,6 @@
 #define SISOCKS_C
 #include "sisocks.h"
+#include <errno.h>
 
 #ifdef windows
 
