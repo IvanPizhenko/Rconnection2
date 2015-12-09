@@ -10,13 +10,16 @@ CC=gcc
 CXX:=g++
 AR:=ar
 DEFS:=-Dunix -DNO_CONFIG_H -DHAVE_NETINET_TCP_H  -DHAVE_NETINET_IN_H 
-CFLAGS:=-std=c99 -Wall -Werror -Wextra -Wpedantic -fmax-errors=3
-CXXFLAGS:=-std=c++11 -Wall -Werror -Wextra -Wpedantic -fmax-errors=3
+CFLAGS:=-m64 -pthread -std=c99 -Wall -Werror -Wextra -Wpedantic -fmax-errors=3
+CXXFLAGS:=-m64 -pthread -std=c++11 -Wall -Werror -Wextra -Wpedantic -fmax-errors=3
 ARFLAGS:=
 
 ifeq ("$(DEBUG)", "1")
-CFLAGS+=-g3 -ggdb
-CXXFLAGS+=-g3 -ggdb
+CFLAGS+=-Og -g3 -ggdb  -DDEBUG -D_DEBUG
+CXXFLAGS+=-Og -g3 -ggdb  -DDEBUG -D_DEBUG
+else
+CFLAGS+=-O2 -flto -DNDEBUG
+CXXFLAGS+=-O2 -flto -DNDEBUG
 endif
 
 ifeq ("$(WEFFCXX)", "1")
