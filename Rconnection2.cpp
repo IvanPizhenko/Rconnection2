@@ -1,7 +1,6 @@
 /*
  *  C++ Interface to Rserve
  *  Copyright (C) 2004-8 Simon Urbanek, All rights reserved.
- *  Copyright (C) 2015 Ivan Pizhenko <ivan.pizhenko __at__ gmail.com>, All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -42,22 +41,24 @@
    -11 - operation is unsupported (e.g. unix login while crypt is not linked)
    -12 - eval didn't return a SEXP (possibly the server is too old/buggy or crashed)
    */
-#include "Rconnection2.h"
 
-#define MAIN
-#define SOCK_ERRORS
+
+#include "Rconnection2.h"
 #include "sisocks.h"
+
 #ifdef unix
 #include <sys/un.h>
 #include <unistd.h>
 #else
 #define AF_LOCAL -1
 #endif
+
 #if defined HAVE_NETINET_TCP_H && defined HAVE_NETINET_IN_H
 #define CAN_TCP_NODELAY
 #include <netinet/tcp.h>
 #include <netinet/in.h>
 #endif
+
 #ifdef Win32
 #define CAN_TCP_NODELAY
 #endif
@@ -75,7 +76,7 @@ static const char *myID = "Rsrv0103QAP1"; /* this client supports up to protocol
 #define IS_SYMBOL_TYPE_(TYPE) ((TYPE) == XT_SYM || (TYPE) == XT_SYMNAME)
 
 // [IP] Custom commands
-#define CMD_licenseStatus 0x50
+#define CMD_CustomStatus 0x50
 
 #if defined(BUILDING_RCONNECTION2_DLL) && defined(INSTANTIATE_STD_TEMPLATES)
 template class RCONNECTION2_API std::basic_string < char >;
@@ -173,7 +174,7 @@ namespace Rconnection2 {
 			int k = header_.dof;
 			while (k > 0)
 			{
-				n = recv(s, (char*)sb, (k > 256) ? 256 : k, 0);
+				n = recv(s, sb, (k > 256) ? 256 : k, 0);
 				if (n < 1)
 				{
 					closesocket(s);
@@ -187,7 +188,7 @@ namespace Rconnection2 {
 		{
 			alloc_data_only(i);
 			char *dp = get_data();
-			while (i > 0 && (n = recv(s, (char*)dp, i, 0)) > 0)
+			while (i > 0 && (n = recv(s, dp, i, 0)) > 0)
 			{
 				dp += n;
 				i -= n;
@@ -250,6 +251,27 @@ namespace Rconnection2 {
 		return failed;
 	}
 
+	Rexp::Rexp(const std::shared_ptr<Rmessage>& msg) 
+	:
+		len_(0),
+		type_(-1),
+		data_(NULL),
+		next_(NULL),
+		buffer_(msg->get_buffer())
+	{
+		#ifdef DEBUG_CXX
+		std::cout << "new Rexp@" << (void*)this << std::endl;
+		#endif
+		int hl=1;
+		const unsigned int *hp = msg->get_par(0);
+		Rsize_t plen=hp[0]>>8;
+		if ((hp[0]&DT_LARGE)>0) {
+			hl++;
+			plen|=((Rsize_t)hp[1])<<24;
+		}
+		next_ = parseBytes(hp+hl);
+	}
+	
 	Rexp::Rexp(const unsigned int *pos, const std::shared_ptr<MessageBuffer>& buffer)
 	:
 		len_(0),
@@ -290,13 +312,13 @@ namespace Rconnection2 {
 		Rsize_t plen = d[0] >> 8;
 		if ((d[0] & DT_LARGE) > 0)
 		{
-			hl++;
+			hl++;	
 			plen |= ((Rsize_t)d[1]) << 24;
 		}
 
 		return createFromBytes(d + hl, msg->get_buffer());
 	}
-
+		
 	std::shared_ptr<Rexp> Rexp::createFromBytes(const unsigned int* d, const std::shared_ptr<MessageBuffer>& buffer)
 	{
 		int type = ptoi(*d) & 0x3f;
@@ -442,7 +464,7 @@ namespace Rconnection2 {
 
 	void Rinteger::fix_content()
 	{
-		if (len_ < 0 || !data_) return;
+		if (!data_) return;
 #ifdef SWAPEND
 		int *i = (int*) data_;
 		int *j = (int*) (data_+len_);
@@ -456,7 +478,7 @@ namespace Rconnection2 {
 
 	void Rdouble::fix_content()
 	{
-		if (len_ < 0 || !data_) return;
+		if (!data_) return;
 #ifdef SWAPEND
 		double *i = (double*) data_;
 		double *j = (double*) (data_+len_);
@@ -506,7 +528,7 @@ namespace Rconnection2 {
 		// compute required buffer length
 		Rsize_t len = 4, padding_len = 0; 
 		for (const auto& s : sv)
-			len += s.length() + 1 + ((!s.empty() && s[0] == 0xFF) ? 1 : 0);
+			len += s.length() + 1 + ((!s.empty() && (unsigned char)s[0] == 0xFF) ? 1 : 0);
 		if (len > 0xfffff0) len += 4;
 		while (len & 3) { ++len; ++padding_len; }
 
@@ -526,7 +548,7 @@ namespace Rconnection2 {
 
 		for (const auto& s : sv)
 		{
-			if (!s.empty() && s[0] == 0xFF) *p++ = (char)0xFF;
+			if (!s.empty() && (unsigned char)s[0] == 0xFF) *p++ = (char)0xFF;
 			strcpy(p, s.c_str());
 			p += s.length() + 1;
 		}
@@ -642,7 +664,6 @@ namespace Rconnection2 {
 	{
 		if (!strs_populated_)
 		{
-			size_t i = 0;
 			for (const auto& p : cont_)
 			{
 				if (p->get_type() == XT_STR)
@@ -675,7 +696,7 @@ namespace Rconnection2 {
 	{
 		for (size_t i = 0, n = cont_.size(); i < n; ++i)
 			if (!strcmp(cont_[i], str)) return i;
-		return std::string::npos;
+		return -1;
 	}
 
 
@@ -694,8 +715,7 @@ namespace Rconnection2 {
 		}
 	}
 
-	template<>
-	std::shared_ptr<Rexp> Rvector::byName(const char *name) const
+	std::shared_ptr<Rexp> Rvector::byName_Rexp(const char *name) const
 	{
 		/* here we are not using IS_LIST_TYPE_() because XT_LIST_NOTAG is guaranteed to not match */
 		if (cont_.empty() || !attr_ || (attr_->get_type() != XT_LIST && attr_->get_type() != XT_LIST_TAG))
@@ -812,7 +832,7 @@ namespace Rconnection2 {
 			return q;
 		}
 
-		int n = recv(s_, IDstring, 32, 0);
+		int n = recv(s_, IDstring, sizeof(IDstring), 0);
 		if (n != 32)
 		{
 			closesocket(s_);
@@ -946,8 +966,7 @@ namespace Rconnection2 {
 		return status;
 	}
 
-	template<>
-	std::shared_ptr<Rexp> Rconnection::eval(const char *cmd, int *status, int opt)
+	std::shared_ptr<Rexp> Rconnection::eval_to_Rexp(const char *cmd, int *status, int opt)
 	{
 		/* opt = 1 -> void eval */
 		std::shared_ptr<Rmessage> msg = Rmessage::create();
@@ -1084,8 +1103,8 @@ namespace Rconnection2 {
 		strcpy(c, pwd);
 
 #ifdef unix
-		if (auth&A_crypt)
-			strcpy(c, crypt(pwd, salt));
+		if (auth_&A_crypt)
+			strcpy(c, crypt(pwd, salt_));
 #else
 		if (!(auth_&A_plain))
 		{
@@ -1100,11 +1119,11 @@ namespace Rconnection2 {
 		return res;
 	}
 
-	// [IP] out custom API
-	int Rconnection::queryLicenseStatus(bool& status)
+	// [IP] our custom API
+	int Rconnection::queryCustomStatus(bool& status)
 	{
 		std::shared_ptr<Rmessage> msg = Rmessage::create();
-		std::shared_ptr<Rmessage> cmdMessage = Rmessage::create(CMD_licenseStatus, "");
+		std::shared_ptr<Rmessage> cmdMessage = Rmessage::create(CMD_CustomStatus, "");
 		int res = request(*msg, *cmdMessage);
 		if (res == 0)
 			status = msg->get_header().cmd == RESP_OK;

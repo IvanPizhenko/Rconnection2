@@ -1,7 +1,6 @@
 /*
  *  C++ Interface to Rserve
  *  Copyright (C) 2004-8 Simon Urbanek, All rights reserved.
- *  Copyright (C) 2015 Ivan Pizhenko <ivan.pizhenko __at__ gmail.com>, All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -28,6 +27,7 @@
    MAIN     - should be defined in just one file that will contain the fn definitions and variables
               (this is inherited from Rsrv.h and sisocks.h)
 */
+#pragma once 
 
 #ifndef __RCONNECTION2_H__
 #define __RCONNECTION2_H__
@@ -36,11 +36,19 @@
 #define unix
 #endif
 
+#ifdef WIN32
 #include <WinSock2.h>
+#else
+#include <sys/socket.h>
+typedef int SOCKET;
+#endif
 #include <iostream>
 #include <vector>
 #include <memory>
+#include <algorithm>
 #include <string>
+#include <cstring>
+#include <cstdint>
 #include "Rsrv.h"
 
 #ifdef WIN32
@@ -64,7 +72,7 @@
 
 namespace Rconnection2 {
 
-	typedef unsigned int Rsize_t;
+	typedef uint32_t Rsize_t;
 
 	//=== Rconnection error codes
 
@@ -97,6 +105,8 @@ namespace Rconnection2 {
 		typedef unsigned int buffer_element_type;
 		
 		MessageBuffer() 
+		:
+			bytes_()
 		{
 		}
 
@@ -120,8 +130,8 @@ namespace Rconnection2 {
 	protected:
 		struct phdr header_;
 		std::shared_ptr<MessageBuffer> data_;
-		Rsize_t len_;
 		int complete_;
+		Rsize_t len_;
 
 		// the following is avaliable only for parsed messages (max 16 pars)
 		std::vector<unsigned int *>par_;
@@ -173,6 +183,10 @@ namespace Rconnection2 {
 
 	class RCONNECTION2_API Rexp : public std::enable_shared_from_this < Rexp >
 	{
+	private:
+		explicit Rexp(const Rexp&);
+		Rexp& operator=(const Rexp&);
+		
 	protected:
 		Rsize_t len_;
 		int type_;
@@ -186,6 +200,7 @@ namespace Rconnection2 {
 		std::shared_ptr<MessageBuffer> buffer_;
 
 	protected:
+		explicit Rexp(const std::shared_ptr<Rmessage>& msg);
 		Rexp(const unsigned int *pos, const std::shared_ptr<MessageBuffer>& buffer);
 		Rexp(int type, const char *data = 0, int len = 0, std::shared_ptr<Rexp> attr = std::shared_ptr<Rexp>());
 		virtual void fix_content() {}
@@ -385,8 +400,9 @@ namespace Rconnection2 {
 	protected:
 		std::vector<const char*> cont_;
 
-		Rstrings(const std::shared_ptr<Rmessage>& msg) : Rexp(msg) {}
-		Rstrings(const unsigned int *ipos, const std::shared_ptr<MessageBuffer>& buffer) : Rexp(ipos, buffer) {}
+		Rstrings(const std::shared_ptr<Rmessage>& msg) : Rexp(msg), cont_() {}
+		Rstrings(const unsigned int *ipos, const std::shared_ptr<MessageBuffer>& buffer) : Rexp(ipos, buffer), cont_() 
+{}
 		virtual void fix_content();
 
 	public:
@@ -471,9 +487,14 @@ namespace Rconnection2 {
 	protected:
 		std::shared_ptr<Rexp> head_, tag_, tail_;
 
-		Rlist(const std::shared_ptr<Rmessage>& msg) : Rexp(msg) {}
+		Rlist(const std::shared_ptr<Rmessage>& msg) : Rexp(msg), head_(), tag_(), tail_() {}
 
-		Rlist(const unsigned int *ipos, const std::shared_ptr<MessageBuffer>& buffer) : Rexp(ipos, buffer) {}
+		Rlist(const unsigned int *ipos, const std::shared_ptr<MessageBuffer>& buffer) 
+		: 
+			Rexp(ipos, buffer), 
+			head_(), tag_(), tail_()
+		{
+		}
 
 		/* this is a sort of special constructor that allows to create a Rlist
 		   based solely on its content. This is necessary since 0.5 because
@@ -484,7 +505,8 @@ namespace Rconnection2 {
 			:
 			Rexp(type, 0, 0),
 			head_(head),
-			tag_(tag)
+			tag_(tag),
+			tail_()
 		{
 			next_ = next;
 		}
@@ -556,6 +578,8 @@ namespace Rconnection2 {
 		Rvector(const std::shared_ptr<Rmessage>& msg)
 			:
 			Rexp(msg),
+			cont_(),
+			strs_(),
 			strs_populated_(false)
 		{
 		}
@@ -563,6 +587,8 @@ namespace Rconnection2 {
 		Rvector(const unsigned int *ipos, const std::shared_ptr<MessageBuffer>& buffer)
 			:
 			Rexp(ipos, buffer),
+			cont_(),
+			strs_(),
 			strs_populated_(false)
 		{
 		}
@@ -591,17 +617,21 @@ namespace Rconnection2 {
 
 		const char *stringAt(size_t i)
 		{
-			if (i < 0 || i >= cont_.size() || !cont_[i] || cont_[i]->get_type() != XT_STR) return 0;
-			return ((Rstring*)cont_[i].get())->c_str();
+			if (i >= cont_.size() || !cont_[i] || cont_[i]->get_type() != XT_STR) 
+				return 0;
+			else
+				return ((Rstring*)cont_[i].get())->c_str();
 		}
 
 		std::shared_ptr<Rexp> elementAt(int i) { return cont_[i]; }
+		
 		template<class V> std::shared_ptr<V> byName(const char *name) const
 		{
-			std::shared_ptr<Rexp> p = byName<Rexp>(name);
+			std::shared_ptr<Rexp> p = byName_Rexp(name);
 			return std::shared_ptr<V>(p, static_cast<V*>(p.get()));
 		}
-		template<> std::shared_ptr<Rexp> byName(const char *name) const;
+		
+		std::shared_ptr<Rexp> byName_Rexp(const char *name) const;
 
 		virtual std::ostream& os_print(std::ostream& os)
 		{
@@ -631,9 +661,10 @@ namespace Rconnection2 {
 		char key_[32];
 
 		Rsession(const char *host, int port, const char key[32])
+		:
+			host_(host),
+			port_ (port)
 		{
-			host_ = host;
-			port_ = port;
 			memcpy(key_, key, 32);
 		}
 
@@ -655,8 +686,8 @@ namespace Rconnection2 {
 	protected:
 		std::string host_;
 		int  port_;
-		SOCKET s_;
 		int  family_;
+		SOCKET s_;
 		int auth_;
 		char salt_[2];
 		std::vector<char> session_key_;
@@ -692,10 +723,11 @@ namespace Rconnection2 {
 		int voidEval(const char *cmd);
 		template<class V> std::shared_ptr<V> eval(const char *cmd, int *status = 0, int opt = 0)
 		{
-			std::shared_ptr<Rexp> p = eval<Rexp>(cmd, status, opt);
+			std::shared_ptr<Rexp> p = eval_to_Rexp(cmd, status, opt);
 			return std::shared_ptr<V>(p, static_cast<V*>(p.get()));
 		}
-		template<> std::shared_ptr<Rexp> eval(const char *cmd, int *status, int opt);
+
+		std::shared_ptr<Rexp> eval_to_Rexp(const char *cmd, int *status, int opt);
 
 		int login(const char *user, const char *pwd);
 		int shutdown(const char *key);
@@ -713,7 +745,7 @@ namespace Rconnection2 {
 		std::shared_ptr<Rsession> detach(int *status = 0);
 		// sessions are resumed using resume() method of the Rsession object
 
-		int queryLicenseStatus(bool& status); // [IP] out custom API
+		int queryCustomStatus(bool& status); // [IP] our custom API
 
 
 #ifdef CMD_ctrl
