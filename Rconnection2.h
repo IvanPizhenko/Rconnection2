@@ -260,6 +260,7 @@ namespace Rconnection2 {
 		Rinteger(const unsigned int *ipos, const std::shared_ptr<MessageBuffer>& buffer) : Rexp(ipos, buffer) { }
 		Rinteger(const int *array, int count) : Rexp(XT_ARRAY_INT, (char*)array, count*sizeof(int)) { }
 		Rinteger(const std::vector<int>& array) : Rexp(XT_ARRAY_INT, (char*)&array[0], array.size()*sizeof(int)) {}
+		Rinteger(const std::vector<unsigned>& array) : Rexp(XT_ARRAY_INT, (char*)&array[0], array.size()*sizeof(unsigned)) {}
 		virtual void fix_content();
 
 	public:
@@ -285,6 +286,13 @@ namespace Rconnection2 {
 		}
 
 		static std::shared_ptr<Rinteger> create(const std::vector<int>& array)
+		{
+			auto p = std::shared_ptr<Rinteger>(new Rinteger(array));
+			p->fix_content();
+			return p;
+		}
+
+		static std::shared_ptr<Rinteger> create(const std::vector<unsigned>& array)
 		{
 			auto p = std::shared_ptr<Rinteger>(new Rinteger(array));
 			p->fix_content();
