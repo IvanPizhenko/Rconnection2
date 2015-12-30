@@ -174,7 +174,7 @@ namespace Rconnection2 {
 			int k = header_.dof;
 			while (k > 0)
 			{
-				n = recv(s, (char*)sb, (k > 256) ? 256 : k, 0);
+				n = recv(s, sb, (k > 256) ? 256 : k, 0);
 				if (n < 1)
 				{
 					closesocket(s);
@@ -188,7 +188,7 @@ namespace Rconnection2 {
 		{
 			alloc_data_only(i);
 			char *dp = get_data();
-			while (i > 0 && (n = recv(s, (char*)dp, i, 0)) > 0)
+			while (i > 0 && (n = recv(s, dp, i, 0)) > 0)
 			{
 				dp += n;
 				i -= n;
@@ -832,7 +832,7 @@ namespace Rconnection2 {
 			return q;
 		}
 
-		int n = recv(s_, IDstring, 32, 0);
+		int n = recv(s_, IDstring, sizeof(IDstring), 0);
 		if (n != 32)
 		{
 			closesocket(s_);
