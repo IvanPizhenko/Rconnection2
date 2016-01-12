@@ -300,7 +300,8 @@ namespace Rconnection2 {
 		if (len)
 		{
 			buffer_ = std::make_shared<MessageBuffer>(len);
-			data = buffer_->get<char>();
+			data_ = buffer_->get<char>();
+			memcpy(data_, data, len);
 		}
 		next_ = (char*)data + len;
 	}
