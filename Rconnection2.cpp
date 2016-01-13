@@ -154,14 +154,14 @@ namespace Rconnection2 {
 		((int*)get_data())[1] = itop(i);
 	}
 
-	int Rmessage::read(int s)
+	int Rmessage::read(IRconnection& conn)
 	{
+		SOCKET s = conn.getSocket();
 		complete_ = 0;
 		int n = recv(s, (char*)&header_, sizeof(header_), 0);
 		if (n != sizeof(header_))
 		{
-			closesocket(s);
-			s = -1;
+			conn.disconnect();
 			return (n == 0) ? -7 : -8;
 		}
 		Rsize_t i = len_ = header_.len = ptoi(header_.len);
@@ -177,8 +177,7 @@ namespace Rconnection2 {
 				n = recv(s, sb, (k > 256) ? 256 : k, 0);
 				if (n < 1)
 				{
-					closesocket(s);
-					s = -1;
+					conn.disconnect();
 					return -8; // malformed packet
 				}
 				k -= n;
@@ -195,8 +194,7 @@ namespace Rconnection2 {
 			}
 			if (i > 0)
 			{
-				closesocket(s);
-				s = -1;
+				conn.disconnect();
 				return -8;
 			}
 		}
@@ -233,8 +231,9 @@ namespace Rconnection2 {
 		}
 	}
 
-	int Rmessage::send(int s)
+	int Rmessage::send(IRconnection& conn)
 	{
+		SOCKET s = conn.getSocket();
 		int failed = 0;
 		header_.cmd = itop(header_.cmd);
 		header_.len = itop(header_.len);
@@ -814,8 +813,7 @@ namespace Rconnection2 {
 #endif
 		if (i == -1)
 		{
-			closesocket(s_);
-			s_ = -1;
+			disconnect();
 			return -1; // connect failed
 		}
 
@@ -824,34 +822,30 @@ namespace Rconnection2 {
 			int n = ::send(s_, &session_key_[0], 32, 0);
 			if (n != 32)
 			{
-				closesocket(s_);
-				s_ = -1;
+				disconnect();
 				return -2; // handshake failed (session key send error)
 			}
 			std::shared_ptr<Rmessage> msg = Rmessage::create();
-			int q = msg->read(s_);
+			int q = msg->read(*this);
 			return q;
 		}
 
 		int n = recv(s_, IDstring, sizeof(IDstring), 0);
 		if (n != 32)
 		{
-			closesocket(s_);
-			s_ = -1;
+			disconnect();
 			return -2; // handshake failed (no IDstring)
 		}
 
 		if (strncmp(IDstring, myID, 4))
 		{
-			closesocket(s_);
-			s_ = -1;
+			disconnect();
 			return -3; // invalid IDstring
 		}
 
 		if (strncmp(IDstring + 8, myID + 8, 4) || strncmp(IDstring + 4, myID + 4, 4) > 0)
 		{
-			closesocket(s_);
-			s_ = -1;
+			disconnect();
 			return -4; // protocol not supported
 		}
 	{
@@ -871,13 +865,19 @@ namespace Rconnection2 {
 	return 0;
 	}
 
-	void Rconnection::disconnect()
+	bool Rconnection::disconnect()
 	{
+#ifdef WIN32
+		if(s_ != INVALID_SOCKET)
+#else
 		if (s_ > -1)
+#endif
 		{
 			closesocket(s_);
 			s_ = -1;
+			return true;
 		}
+		else return false;
 	}
 	
 	int Rconnection::getLastSocketError(char* buffer, int buffer_len, int options) const
@@ -897,29 +897,26 @@ namespace Rconnection2 {
 		ph.cmd = itop(cmd);
 		if (send(s_, (char*)&ph, sizeof(ph), 0) != sizeof(ph))
 		{
-			closesocket(s_);
-			s_ = -1;
+			disconnect();
 			return -9;
 		}
 		if (len > 0 && send(s_, (char*)par, len, 0) != len)
 		{
-			closesocket(s_);
-			s_ = -1;
+			disconnect();
 			return -9;
 		}
-		return msg.read(s_);
+		return msg.read(*this);
 	}
 
 	int Rconnection::request(Rmessage& targetMsg, Rmessage& contents)
 	{
 		if (s_ == -1) return -5; // not connected
-		if (contents.send(s_))
+		if (contents.send(*this))
 		{
-			closesocket(s_);
-			s_ = -1;
+			disconnect();
 			return -9; // send error
 		}
-		int res = targetMsg.read(s_);
+		int res = targetMsg.read(*this);
 		if (res) return res;
 		return (targetMsg.get_header().cmd & RESP_ERR) == RESP_ERR ? -20 : 0;
 	}

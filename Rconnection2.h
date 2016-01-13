@@ -97,6 +97,17 @@ namespace Rconnection2 {
 #define A_crypt    0x002
 #define A_plain    0x004
 
+	class RCONNECTION2_API IRconnection
+	{
+	protected:
+		IRconnection() {}
+	public:
+		virtual ~IRconnection() {}
+		virtual int connect() = 0;
+		virtual bool disconnect() = 0;
+		virtual SOCKET getSocket() const = 0;
+	};
+
 	//===================================== Rmessage ---- QAP1 storage
 
 	class RCONNECTION2_API MessageBuffer
@@ -174,9 +185,10 @@ namespace Rconnection2 {
 
 		const struct phdr& get_header() const { return header_; }
 
-		int read(int s);
+		int read(IRconnection& conn);
 		void parse();
-		int send(int s);
+
+		int send(IRconnection& conn);
 	};
 
 	//===================================== Rexp --- basis for all SEXPs
@@ -689,7 +701,7 @@ namespace Rconnection2 {
 		const char *key() const { return key_; }
 	};
 
-	class RCONNECTION2_API Rconnection
+	class RCONNECTION2_API Rconnection: public IRconnection
 	{
 	protected:
 		std::string host_;
@@ -721,8 +733,10 @@ namespace Rconnection2 {
 			disconnect();
 		}
 
-		int connect();
-		void disconnect();
+		virtual int connect();
+		virtual bool disconnect();
+		virtual SOCKET getSocket() const { return s_; }
+		
 		int getLastSocketError(char* buffer, int buffer_len, int options) const;
 
 		/** --- high-level functions --- */
