@@ -125,7 +125,7 @@ namespace Rconnection2 {
 		strcpy(get_data() + 4, txt);
 	}
 
-	Rmessage::Rmessage(int cmd, const void *buf, int dlen, int raw_data)
+	Rmessage::Rmessage(int cmd, const void *buf, Rsize_t dlen, int raw_data)
 		:
 		complete_(1),
 		len_(0)
@@ -285,7 +285,7 @@ namespace Rconnection2 {
 		next_ = parseBytes(pos);
 	}
 
-	Rexp::Rexp(int type, const char *data, int len, std::shared_ptr<Rexp> attr)
+	Rexp::Rexp(int type, const char *data, Rsize_t len, std::shared_ptr<Rexp> attr)
 	:
 		len_(len),
 		type_(type),
@@ -296,13 +296,13 @@ namespace Rconnection2 {
 #ifdef DEBUG_CXX
 		std::cout << "new Rexp2@" << static_cast<void*>(this) << std::endl;
 #endif
-		if (len)
+		if (len_)
 		{
-			buffer_ = std::make_shared<MessageBuffer>(len);
+			buffer_ = std::make_shared<MessageBuffer>(len_);
 			data_ = buffer_->get<char>();
-			memcpy(data_, data, len);
+			memcpy(data_, data, len_);
 		}
-		next_ = (char*)data + len;
+		next_ = (char*)data + len_;
 	}
 
 	std::shared_ptr<Rexp> Rexp::create(const std::shared_ptr<Rmessage>& msg)
@@ -880,14 +880,14 @@ namespace Rconnection2 {
 		else return false;
 	}
 	
-	int Rconnection::getLastSocketError(char* buffer, int buffer_len, int options) const
+	int Rconnection::getLastSocketError(char* buffer, size_t buffer_len, int options) const
 	{
 		return sockerrorchecks(buffer, buffer_len, options);
 	}
 
 	/**--- low-level functions --*/
 
-	int Rconnection::request(Rmessage& msg, int cmd, int len, void *par)
+	int Rconnection::request(Rmessage& msg, int cmd, Rsize_t len, void *par)
 	{
 		struct phdr ph;
 

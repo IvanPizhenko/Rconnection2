@@ -1,25 +1,31 @@
 # Target definition
 TARGET:=libRconnection2.a
-SOURCES:=Rconnection2.cpp sisocks.c
 
-OBJECTS:=$(patsubst %.c,%.o,$(SOURCES))
-OBJECTS+=$(patsubst %.cpp,%.o,$(SOURCES))
+C_SOURCES:=sisocks.c
+CXX_SOURCES:=Rconnection2.cpp
+
+OBJECTS:=$(patsubst %.c,%.o,$(C_SOURCES))
+OBJECTS+=$(patsubst %.cpp,%.o,$(CXX_SOURCES))
 
 # Toolchain options
 CC=gcc
 CXX:=g++
 AR:=ar
 DEFS:=-Dunix -DNO_CONFIG_H -DHAVE_NETINET_TCP_H  -DHAVE_NETINET_IN_H 
-CFLAGS:=-m64 -pthread -std=c99 -Wall -Werror -Wextra -Wpedantic -fmax-errors=3
-CXXFLAGS:=-m64 -pthread -std=c++11 -Wall -Werror -Wextra -Wpedantic -fmax-errors=3
+CFLAGS:=-m64 -pthread -g3 -ggdb -std=c99 -Wall -Werror -Wextra -Wpedantic -fmax-errors=3
+CXXFLAGS:=-m64 -pthread -g3 -ggdb -std=c++11 -Wall -Werror -Wextra -Wpedantic -fmax-errors=3
 ARFLAGS:=
 
 ifeq ("$(DEBUG)", "1")
-CFLAGS+=-Og -g3 -ggdb  -DDEBUG -D_DEBUG
-CXXFLAGS+=-Og -g3 -ggdb  -DDEBUG -D_DEBUG
+CFLAGS+=-Og -DDEBUG -D_DEBUG
+CXXFLAGS+=-Og -DDEBUG -D_DEBUG
 else
-CFLAGS+=-O2 -flto -DNDEBUG
-CXXFLAGS+=-O2 -flto -DNDEBUG
+CFLAGS+=-O2 -DNDEBUG
+CXXFLAGS+=-O2 -DNDEBUG
+ifeq ("$(LTO)", "1")
+CFLAGS+=-flto
+CXXFLAGS+=-flto
+endif
 endif
 
 ifeq ("$(WEFFCXX)", "1")
@@ -50,6 +56,7 @@ rebuild:
 	
 $(TARGET): $(OBJECTS)
 	echo Creating library $@...
+	echo $(OBJECTS)
 	$(AR) rvs $(ARFLAGS) $@ $(OBJECTS)
 
 %.o: %.c

@@ -121,7 +121,7 @@ extern int socklasterr;
 extern FILE *sockerrlog;
 #endif
 
-int sockerrorchecks(char *buf, int blen, int res);
+int sockerrorchecks(char *buf, size_t blen, int res);
 int sockerrorcheck(char *sn, int rtb, int res);
     
 #define FCF(X,F) sockerrorcheck(X,1,F)

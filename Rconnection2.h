@@ -158,14 +158,14 @@ namespace Rconnection2 {
 		Rmessage(int cmd); // 0 data_
 		Rmessage(int cmd, const char *txt); // DT_STRING data_
 		Rmessage(int cmd, int i); // DT_INT data_ (1 entry)
-		Rmessage(int cmd, const void *buf, int len, int raw_data = 0); // raw data_ or DT_BYTESTREAM
+		Rmessage(int cmd, const void *buf, Rsize_t len, int raw_data = 0); // raw data_ or DT_BYTESTREAM
 
 	public:
 		static std::shared_ptr<Rmessage> create() { return std::shared_ptr<Rmessage>(new Rmessage()); }
 		static std::shared_ptr<Rmessage> create(int cmd) { return std::shared_ptr<Rmessage>(new Rmessage(cmd)); } // 0 data_
 		static std::shared_ptr<Rmessage> create(int cmd, const char *txt)  { return std::shared_ptr<Rmessage>(new Rmessage(cmd, txt)); } // DT_STRING data_
 		static std::shared_ptr<Rmessage> create(int cmd, int i) { return std::shared_ptr<Rmessage>(new Rmessage(cmd, i)); } // DT_INT data_ (1 entry)
-		static std::shared_ptr<Rmessage> create(int cmd, const void *buf, int len, int raw_data = 0) { return std::shared_ptr<Rmessage>(new Rmessage(cmd, buf, len, raw_data)); } // raw data_ or DT_BYTESTREAM
+		static std::shared_ptr<Rmessage> create(int cmd, const void *buf, Rsize_t len = 0, int raw_data = 0) { return std::shared_ptr<Rmessage>(new Rmessage(cmd, buf, len, raw_data)); } // raw data_ or DT_BYTESTREAM
 		virtual ~Rmessage() {}
 
 		int command() { return complete_ ? header_.cmd : -1; }
@@ -214,7 +214,11 @@ namespace Rconnection2 {
 	protected:
 		explicit Rexp(const std::shared_ptr<Rmessage>& msg);
 		Rexp(const unsigned int *pos, const std::shared_ptr<MessageBuffer>& buffer);
-		Rexp(int type, const char *data = 0, int len = 0, std::shared_ptr<Rexp> attr = std::shared_ptr<Rexp>());
+		Rexp(int type, const char *data = 0, Rsize_t = 0, std::shared_ptr<Rexp> attr = std::shared_ptr<Rexp>());
+		
+		template<class V, class Extractor>
+		void initFromContainer(const std::vector<V>& data, const Extractor& extractor);
+		
 		virtual void fix_content() {}
 		char *parseBytes(const unsigned int *pos);
 		static std::shared_ptr<Rexp> createFromBytes(const unsigned int *d, const std::shared_ptr<MessageBuffer>& buffer);
@@ -229,7 +233,7 @@ namespace Rconnection2 {
 				: std::shared_ptr<MessageBuffer>()));
 		}
 
-		static std::shared_ptr<Rexp> create(int type, const char *data = 0, int len = 0, 
+		static std::shared_ptr<Rexp> create(int type, const char *data = 0, Rsize_t len = 0, 
 			std::shared_ptr<Rexp> attr = std::shared_ptr<Rexp>())
 		{
 			return std::shared_ptr<Rexp>(new Rexp(type, data, len, attr));
@@ -264,13 +268,34 @@ namespace Rconnection2 {
 		}
 	};
 
+
+	template<class V, class Extractor>
+	void Rexp::initFromContainer(const std::vector<V>& data, const Extractor& extractor)
+	{
+#ifdef DEBUG_CXX
+		std::cout << "intiFromContainer Rexp2@" << static_cast<void*>(this) << std::endl;
+#endif
+		len_ = data.size() * sizeof(typename Extractor::result_type);
+		if (len_)
+		{
+			buffer_ = std::make_shared<MessageBuffer>(len_);
+			data_ = buffer_->get<char>();
+			typename Extractor::result_type* p = buffer_->get<typename Extractor::result_type>();
+			for (const auto& v: data)
+				*p++ = extractor(v);
+		}
+		next_ = NULL;
+	}
+
 	//===================================== Rint --- XT_INT/XT_ARRAY_INT
 
 	class RCONNECTION2_API Rinteger : public Rexp {
 	protected:
+		Rinteger() : Rexp(XT_ARRAY_INT) {}
 		Rinteger(const std::shared_ptr<Rmessage>& msg) : Rexp(msg) { }
 		Rinteger(const unsigned int *ipos, const std::shared_ptr<MessageBuffer>& buffer) : Rexp(ipos, buffer) { }
 		Rinteger(const int *array, int count) : Rexp(XT_ARRAY_INT, (char*)array, count*sizeof(int)) { }
+		Rinteger(const unsigned *array, int count) : Rexp(XT_ARRAY_INT, (char*)array, count*sizeof(unsigned)) { }
 		Rinteger(const std::vector<int>& array) : Rexp(XT_ARRAY_INT, (char*)&array[0], array.size()*sizeof(int)) {}
 		Rinteger(const std::vector<unsigned>& array) : Rexp(XT_ARRAY_INT, (char*)&array[0], array.size()*sizeof(unsigned)) {}
 		virtual void fix_content();
@@ -297,6 +322,13 @@ namespace Rconnection2 {
 			return p;
 		}
 
+		static std::shared_ptr<Rinteger> create(const unsigned *array, int count)
+		{
+			auto p = std::shared_ptr<Rinteger>(new Rinteger(array, count));
+			p->fix_content();
+			return p;
+		}
+
 		static std::shared_ptr<Rinteger> create(const std::vector<int>& array)
 		{
 			auto p = std::shared_ptr<Rinteger>(new Rinteger(array));
@@ -307,6 +339,15 @@ namespace Rconnection2 {
 		static std::shared_ptr<Rinteger> create(const std::vector<unsigned>& array)
 		{
 			auto p = std::shared_ptr<Rinteger>(new Rinteger(array));
+			p->fix_content();
+			return p;
+		}
+
+		template<class V, class Extractor>
+		static std::shared_ptr<Rinteger> create(const std::vector<V>& array, const Extractor& extractor)
+		{
+			auto p = std::shared_ptr<Rinteger>(new Rinteger());
+			p->initFromContainer(array, extractor);
 			p->fix_content();
 			return p;
 		}
@@ -328,6 +369,7 @@ namespace Rconnection2 {
 
 	class RCONNECTION2_API Rdouble : public Rexp {
 	protected:
+		Rdouble() : Rexp(XT_ARRAY_DOUBLE) {}
 		Rdouble(const std::shared_ptr<Rmessage>& msg) : Rexp(msg) { }
 		Rdouble(const unsigned int *ipos, const std::shared_ptr<MessageBuffer>& buffer) : Rexp(ipos, buffer) {}
 		Rdouble(const double *array, int count) : Rexp(XT_ARRAY_DOUBLE, (char*)array, count*sizeof(double)) {}
@@ -359,6 +401,15 @@ namespace Rconnection2 {
 		static std::shared_ptr<Rdouble> create(const std::vector<double>& array)
 		{
 			auto p = std::shared_ptr<Rdouble>(new Rdouble(array));
+			p->fix_content();
+			return p;
+		}
+
+		template<class V, class Extractor>
+		static std::shared_ptr<Rdouble> create(const std::vector<V>& array, const Extractor& extractor)
+		{
+			auto p = std::shared_ptr<Rdouble>(new Rdouble());
+			p->initFromContainer(array, extractor);
 			p->fix_content();
 			return p;
 		}
@@ -737,12 +788,22 @@ namespace Rconnection2 {
 		virtual bool disconnect();
 		virtual SOCKET getSocket() const { return s_; }
 		
-		int getLastSocketError(char* buffer, int buffer_len, int options) const;
+		int getLastSocketError(char* buffer, size_t buffer_len, int options) const;
 
 		/** --- high-level functions --- */
 
 		int assign(const char *symbol, const Rexp& exp);
+		int assign(const std::string& symbol, const Rexp& exp)
+		{
+			return assign(symbol.c_str(), exp);
+		}
+
 		int voidEval(const char *cmd);
+		int voidEval(const std::string& cmd)
+		{
+			return voidEval(cmd.c_str());
+		}
+
 		template<class V> std::shared_ptr<V> eval(const char *cmd, int *status = 0, int opt = 0)
 		{
 			std::shared_ptr<Rexp> p = eval_to_Rexp(cmd, status, opt);
@@ -779,7 +840,7 @@ namespace Rconnection2 {
 
 	protected:
 
-		int request(Rmessage& msg, int cmd, int len = 0, void *par = 0);
+		int request(Rmessage& msg, int cmd, Rsize_t len = 0, void *par = 0);
 		int request(Rmessage& targetMsg, Rmessage& contents);
 
 	};

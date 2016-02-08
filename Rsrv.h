@@ -390,15 +390,11 @@ typedef unsigned long rlen_t;
 /* FIXME: all the mess below needs more efficient implementation - the current one is so messy to work around alignment problems on some platforms like Sun and HP 9000 */
 
 #ifdef SWAPEND  /* swap endianness - for PPC and co. */
-#ifdef MAIN
-unsigned int itop(unsigned int i) { char b[4]; b[0]=((char*)&i)[3]; b[3]=((char*)&i)[0]; b[1]=((char*)&i)[2]; b[2]=((char*)&i)[1]; return *((unsigned int*)b); }
-double dtop(double i) { char b[8]; b[0]=((char*)&i)[7]; b[1]=((char*)&i)[6]; b[2]=((char*)&i)[5]; b[3]=((char*)&i)[4]; b[7]=((char*)&i)[0]; b[6]=((char*)&i)[1]; b[5]=((char*)&i)[2]; b[4]=((char*)&i)[3]; return *((double*)b); }
-void fixdcpy(void *t,void *s) { int i=0; while (i<8) { ((char*)t)[7-i]=((char*)s)[i]; i++; } }
-#else
-extern unsigned int itop(unsigned int i);
-extern double dtop(double i);
-extern void fixdcpy(void *t,void *s);
-#endif
+
+inline unsigned int itop(unsigned int i) { char b[4]; b[0]=((char*)&i)[3]; b[3]=((char*)&i)[0]; b[1]=((char*)&i)[2]; b[2]=((char*)&i)[1]; return *((unsigned int*)b); }
+inline double dtop(double i) { char b[8]; b[0]=((char*)&i)[7]; b[1]=((char*)&i)[6]; b[2]=((char*)&i)[5]; b[3]=((char*)&i)[4]; b[7]=((char*)&i)[0]; b[6]=((char*)&i)[1]; b[5]=((char*)&i)[2]; b[4]=((char*)&i)[3]; return *((double*)b); }
+inline void fixdcpy(void *t,void *s) { int i=0; while (i<8) { ((char*)t)[7-i]=((char*)s)[i]; i++; } }
+
 #define ptoi(X) itop(X) /* itop*itop=id */
 #define ptod(X) dtop(X)
 #else
@@ -414,15 +410,12 @@ extern void fixdcpy(void *t,void *s);
 /* this tiny function can be used to make sure that the endianess
    is correct (it is not included if the package was configured with
    autoconf since then it should be fine anyway) */
-#ifdef MAIN
-int isByteSexOk() {
+
+inline int isByteSexOk() {
     int i;
     i=itop(0x12345678);
     return (*((char*)&i)==0x78);
 }
-#else
-extern int isByteSexOk();
-#endif
 
 #else
 #define isByteSexOk 1
@@ -442,3 +435,4 @@ extern int isByteSexOk();
 /* tab-width: 4 */
 /* c-basic-offset: 4 */
 /* End: */
+

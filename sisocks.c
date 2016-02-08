@@ -19,7 +19,7 @@ int socklasterr;
 FILE *sockerrlog=0;
 
 /* copy error description to buf or set *buf=0 if none */
-int sockerrorchecks(char *buf, int blen, int res) {
+int sockerrorchecks(char *buf, size_t blen, int res) {
 	*buf=0;
 	if (res==-1) {
 		switch(sockerrno) {
